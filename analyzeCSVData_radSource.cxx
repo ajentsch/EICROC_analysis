@@ -253,7 +253,6 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 		if(!inputCSVFile_pedestal){ 
 			cout << "PEDESTAL File does not exist, using internal pedestal map..." << endl; 
 			usePedestalFile = false;
-			continue;
 		}
 
 		numFiles++;
