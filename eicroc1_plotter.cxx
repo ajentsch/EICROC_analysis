@@ -70,7 +70,7 @@ Color_t markerColor[16] = {kGray, kGray+1, kGray+2, kGray+3, kGreen, kGreen+1, k
 
 int markerStyle[16] = {20, 20, 20, 20, 21, 21, 21, 21, 22, 22, 22, 22, 29, 29, 29, 29};
 
-void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_pedestal = ""){
+void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal = ""){
 
 	ifstream inputCSVFile;
 	ifstream inputCSVFile_pedestal;
