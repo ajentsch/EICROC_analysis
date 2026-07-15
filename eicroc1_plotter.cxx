@@ -72,6 +72,8 @@ int markerStyle[26] = {20, 20, 20, 20, 21, 21, 21, 21, 22, 22, 22, 22, 29, 29, 2
 int numGoodEvents[32][32];
 int numEvents = 1999;
 int pixels_of_interest[16] = {0, 1, 2, 3, 32, 33, 34, 35, 64, 65, 66, 67, 96, 97, 98, 99}; // {0, 7, 15, 31, 32, 39, 47, 63, 64, 71, 78, 85, 86, 93, 100, 107};
+int pixel_colors[16] = {kBlack, kRed, kBlue, kGreen+2, kMagenta, kCyan+2, kOrange+1, kSpring-1, 
+                        kViolet, kPink+9, kTeal-1, kAzure+1, kYellow+2, kGray+2, kRed-7, kBlue-7};
 
 void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal = ""){
 	// set up input file stream
@@ -111,6 +113,7 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 
 	// noise distr histogram and other defined
 	TH1D * h_noise_distributions[1024];
+	TH1D * h_noise_per_timebin[2][8]; // for 2 pixels only
 	
 	TH1D * hitPixel = new TH1D("hit_pixel", "hit_pixel", 1024, 0.0, 1024.0);
 	TH2D * ADC_mean_map = new TH2D("ADC_mean_map", "ADC_mean_map", 32, 0, 32, 32, 0, 32);
@@ -125,6 +128,15 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 
 	TGraph * tdc_mean_distributions[numOfAnalyzedEvents][1024];
 	TGraph * tdc_mean_distributions_PEDESTAL[numOfAnalyzedEvents][1024];
+
+	// 16 scatter plots for pedestal subtracted means per timebin
+	TMultiGraph *mg_drift = new TMultiGraph();
+	mg_drift->SetTitle("SUM(ADCn)/Nevents - ADC(mean);Time Bin (25ns);Average Delta [DACu]");
+
+	TGraph *g_pixel_drift[16];
+	for (int i = 0; i < 16; i++) {
+		g_pixel_drift[i] = new TGraph();
+	}
 	
 	TGraphErrors * pedestal_waveforms[1024];
 
@@ -172,6 +184,14 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 		noise_title.Form("h_noise_distribution_pixel_%d",pixel);
 
 		h_noise_distributions[pixel] = new TH1D(noise_title, "Raw ADC Noise Distribution;ADC Channel;Counts", 256, 0, 256);
+
+		if (pixel <= 1) {
+			for (int tbin = 0; tbin < 8; tbin++){
+				TString noise_tbin_title;
+				noise_tbin_title.Form("h_noise_distribution_pixel_%d_tbin_%d",pixel, tbin);
+				h_noise_per_timebin[pixel][tbin] = new TH1D(noise_tbin_title, "Raw ADC Noise;ADC Channel;Counts", 25, 0, 256);
+			}
+		}
 
 	}
 		//adc_mean_distributions[16][16] = new TH1D(Form("adc_max_distribution_pixel_%d%d", i, j), "counts; ADC value [DACu]", 256, 0, 255);
@@ -578,11 +598,14 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 					if (pixel < 1024 && numTriggeredEvents < numOfAnalyzedEvents) {
 						adc_event_buffer[numTriggeredEvents][pixel][tBin] = ADC_val;
 						h_noise_distributions[pixel]->Fill(ADC_val);
+						if (pixel <= 1) {
+							h_noise_per_timebin[pixel][tBin]->Fill(ADC_val);
+						}
 					}
 				}
 			}
 		} // END of while loop
-
+		
 		cout << "Number of events total recorded : " << numEvents << endl;
 
 		inputCSVFile.close();
@@ -607,6 +630,8 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 				double sum = 0.0;
 				double sum_squares = 0.0;
 				int count = 0;
+				double global_sum = 0.0;
+				int global_count = 0;
 
 				// 1. Accumulate values from EVERY captured frame inside the buffer matrix
 				for (int ev = 0; ev < numTriggeredEvents; ev++) {
@@ -614,10 +639,13 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 					sum += adc_val;
 					sum_squares += (adc_val * adc_val);
 					count++;
+					global_sum += adc_event_buffer[ev][pixel][tBin];
+					global_count++;
 				}
 
 				double mean = 0.0;
 				double rms_uncertainty = 0.0;
+				double global_pixel_mean = (global_count > 0) ? (global_sum / global_count) : 0.0;
 				
 				if (count > 0) {
 					mean = sum / count;
@@ -631,15 +659,41 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 					}
 				}
 
+				// calculate mean per timebin for the 16 scatter plots of interest
+				for (int tBin = 0; tBin < 8; tBin++) {
+					double timebin_sum = 0.0;
+					int timebin_count = 0;
+					for (int ev = 0; ev < numTriggeredEvents; ev++) {
+						timebin_sum += adc_event_buffer[ev][pixel][tBin];
+						timebin_count++;
+					}
+					double timebin_mean = (timebin_count > 0) ? (timebin_sum / timebin_count) : 0.0;
+
+					// Calculate the relative delta
+					double delta = timebin_mean - global_pixel_mean;
+
+					// Add the coordinate point (X = Time Bin, Y = Delta) to the pixel's graph
+					g_pixel_drift[pixel_id]->SetPoint(tBin, tBin, delta);
+				}
 				// 2. Set EXACTLY ONE single average data point per time bin for the pixel graph
 				int pointIdx = adc_mean_distributions[pixel]->GetN();
 				adc_mean_distributions[pixel]->SetPoint(pointIdx, tBin, mean);
 				
 				// The vertical error bar now represents the standard dev across frames
 				adc_mean_distributions[pixel]->SetPointError(pointIdx, 0.0, rms_uncertainty);
+
+				// set individual pixels for the layered scatter plot
+				g_pixel_drift[pixel_id]->SetMarkerStyle(20 + (pixel_id % 4)); // Varies marker shape (circle, square, triangle, etc.)
+				g_pixel_drift[pixel_id]->SetMarkerSize(1.2);
+				g_pixel_drift[pixel_id]->SetMarkerColor(pixel_colors[pixel_id]);
+				g_pixel_drift[pixel_id]->SetLineColor(pixel_colors[pixel_id]); // If you want to connect them with a faint line
+
+				// Add this pixel's graph to the multigraph container
+				mg_drift->Add(g_pixel_drift[pixel_id]);
 			}
 		}
 		cout << "Averages and graph error properties successfully calculated!" << endl;
+
 
 		// =========================================================================
 		// Your drawing loop follows next (for (int ev = 0; ev < numTriggeredEvents; ev++)) ...
@@ -653,7 +707,6 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 	///////////////////////////////////////////////////////////////////
 	//////// END OF MAIN DATA CODE BLOCK ///////////////////////////////
 	///////////////////////////////////////////////////////////////////
-	
 		/**************
 	
 	These sections are used for doing s-curve calculations, which I now do in a different macro. However, it can be brought back here, as well.
@@ -875,12 +928,31 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 		}
 	}	
 	*/
-	
-	TCanvas * can1 = new TCanvas("canv1", "canv1", 500, 500);
-	
-	hitPixel->Draw();
-	
+
 	pad = 1;
+
+	TCanvas *c_scatter = new TCanvas("c_scatter", "16 Scatter Plot", 1200, 800);
+	c_scatter->SetGrid(); // Adds a background grid to make centering at 0 easy to verify visually
+
+	// Draw Option "AP": 
+	// 'A' draws the overall bounding axes frame
+	// 'P' draws the points/markers (creates the scatter plot)
+	// If you also want faint trend lines connecting the dots, use "ALP" instead
+	mg_drift->Draw("AP");
+
+	// Optional: Force y-axis limits to be symmetric around zero to clearly show positive/negative drift
+	mg_drift->GetYaxis()->SetRangeUser(-2, 2); 
+
+	// Build a legend so you know which color belongs to which pixel index
+	TLegend *legend = new TLegend(0.85, 0.15, 0.98, 0.85);
+	legend->SetHeader("Pixel No.","C");
+	for (int pixel_id = 0; pixel_id < 16; pixel_id++) {
+		legend->AddEntry(g_pixel_drift[pixel_id], Form("Pixel %d", pixels_of_interest[pixel_id]), "p");
+	}
+	legend->Draw();
+
+	c_scatter->SaveAs("ADC_Timebin_Drift_Scatter.png");
+	
 	
 	TCanvas * adcMeanCan = new TCanvas("canv6", "canv6", 1600, 1600);
 	adcMeanCan->Divide(4,4);	
@@ -985,7 +1057,6 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 	// double peak_ADC[1024] = {0.0}; // Keep track of peak values for the 2D summary map later
 
 	for (int pixel_id = 0; pixel_id < 16; pixel_id++) {
-		for (int pixel_id = 0; pixel_id < 16; pixel_id++) {
 			int pixel = pixels_of_interest[pixel_id];
 			
 			// 1. Calculate the average height (baseline offset) of this specific graph
@@ -1009,8 +1080,9 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 			// Now navigate to the pad and draw the cleanly centered line
 			adcMeanCan->cd(pixel_id + 1);
 			adc_mean_distributions[pixel]->SetMarkerSize(4); // Sets marker to 1.5 times the default size
+			adc_mean_distributions[pixel]->SetMinimum(-0.6);
+			adc_mean_distributions[pixel]->SetMaximum(0.6);
 			adc_mean_distributions[pixel]->Draw("APX");
-		}
 	}
 
 	adcMeanCan->SaveAs(Form("ADC_AVERAGE_distributions_trigger_pixel_%d.png", trigger_pixel));
@@ -1019,7 +1091,7 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 	// =========================================================================
 	// DRAW NOISE ANALYSIS SPECTRUMS INTO A 4x4 CANVAS
 	// =========================================================================
-	cout << "\nDrawing 16 global noise profiles onto 4x4 canvas layout..." << endl;
+	/*cout << "\nDrawing 16 global noise profiles onto 4x4 canvas layout..." << endl;
 	TCanvas *noiseCan = new TCanvas("noiseCan", "Global Noise Spectrum", 1600, 1600);
 	noiseCan->Divide(4, 4);
 
@@ -1046,12 +1118,12 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 	}
 	
 	noiseCan->SaveAs("Global_ADC_Noise_Distribution.png");
-	cout << "SUCCESS: Saved global noise profiles grid!" << endl;
+	cout << "SUCCESS: Saved global noise profiles grid!" << endl;*/
 	
 	// =========================================================================
 	// NOISE ANALYSIS BLOCK (FIT & DISPLAY 4x4 GRID)
 	// =========================================================================
-	/*TCanvas *noiseCan = new TCanvas("noiseCan", "Global Noise Spectrum", 1600, 1600);
+	TCanvas *noiseCan = new TCanvas("noiseCan", "Global Noise Spectrum", 1600, 1600);
 	noiseCan->Divide(4, 4); // Divide into a 4x4 grid
 
 	for (int pixel_id = 0; pixel_id < 16; pixel_id++) {
@@ -1087,7 +1159,41 @@ void eicroc1_plotter(TString inputFileName = "", TString inputFileName_pedestal 
 	}
 	
 	noiseCan->SaveAs("Global_ADC_Noise_Distribution.png");
-	cout << "SUCCESS: Saved global noise distributions grid to Global_ADC_Noise_Distribution.png" << endl;*/
+	cout << "SUCCESS: Saved global noise distributions grid to Global_ADC_Noise_Distribution.png" << endl;
+
+	TCanvas *timebinNoiseCan = new TCanvas("timebinNoiseCan", "Timebin Noise Spectrum", 1000, 2400);
+	timebinNoiseCan->Divide(2,8);
+
+	for (int pixel = 0; pixel < 2; pixel++) {
+		for (int tbin = 0; tbin < 8; tbin++) {
+			timebinNoiseCan->cd((pixel * 8) + tbin + 1);
+			// Style the histogram
+			Double_t mean = h_noise_per_timebin[pixel][tbin]->GetMean();
+
+			// Retrieve current axis bounds
+			TAxis *xAxis = h_noise_per_timebin[pixel][tbin]->GetXaxis();
+			Double_t xMin = xAxis->GetXmin();
+			Double_t xMax = xAxis->GetXmax();
+
+			// Shift the axis limits left by the mean value
+			xAxis->SetLimits(xMin - mean, xMax - mean);
+
+			h_noise_per_timebin[pixel][tbin]->SetLineColor(kBlue);
+			h_noise_per_timebin[pixel][tbin]->SetFillColorAlpha(kBlue, 0.15); 
+			h_noise_per_timebin[pixel][tbin]->SetMarkerStyle(20);
+			h_noise_per_timebin[pixel][tbin]->SetMarkerSize(0.5);
+
+			// Fit a Gaussian profile to the peak to extract true mean and sigma (RMS noise)
+			h_noise_per_timebin[pixel][tbin]->Fit("gaus", "Q");
+
+			// Enable the stats box automatically on the canvas pad
+			gStyle->SetOptFit(1111); 
+			
+			// Draw the structured noise graph
+			h_noise_per_timebin[pixel][tbin]->Draw("E HIST"); 
+		}
+	}
+
 	double trigger_bin_ADC_sum = 0.0;
 	
 	for(int i = 0; i < 4; i++){
