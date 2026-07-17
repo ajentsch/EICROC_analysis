@@ -1,3 +1,16 @@
+#include <TH1.h>
+#include <TH2.h>
+#include <TGraph.h>
+#include <TGraphErrors.h>
+#include <TCanvas.h>
+#include <TF1.h>
+#include <TMath.h>
+#include <TPaveText.h>
+
+
+#include <iostream>
+#include <fstream>
+
 //Lightweight EICROC digital output analyzer
 //
 //
@@ -101,7 +114,7 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 	// number of thresholds, AVERAGED OVER TIME BINS, number of pixels
 	TGraph * adc_mean_distributions[numOfAnalyzedEvents][16];
 	TGraph * adc_mean_distributions_PEDESTAL[numOfAnalyzedEvents][16];
-
+	
 	TGraphErrors * pedestal_waveforms[16];
 
 	for(int tBin = 0; tBin < 8; tBin++){
@@ -237,7 +250,7 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 		
 		//Input files go here --> one is for a pedestal file, the other is for the main data file
 		//inputFileName_pedestal.Form("radioactive_source_digital_data/sr90_unbiased_330threshold_NO_CMD_PULSE_PEDESTAL_06_17_2026_1.csv");
-		inputFileName.Form("radioactive_source_digital_data/sr90_170Vbias_400threshold_TRGOUT_delay_2_timebins_CALIBRATIONS_no_clk_gating_06_24_2026_1.csv");
+		inputFileName.Form("/Users/rkfuentes/Documents/phd/research/BNL_summer_2026/EICROC_analysis/sr90_170Vbias_330threshold_TRGOUT_delay_3_timebins_06_17_2026_1.csv");
 		
 		cout << inputFileName << endl;
 		cout << inputFileName_pedestal << endl;
@@ -318,41 +331,43 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 		//////// BEGINNING OF PEDESTAL CODE BLOCK ///////////////////////////////
 		///////////////////////////////////////////////////////////////////
 
-		while(!inputCSVFile_pedestal.eof() ){ //BEGIN while loop over PEDESTAL file
-	
-			if (getline(inputCSVFile_pedestal, eventNumber_str, ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[7], ';') && getline(inputCSVFile_pedestal, ADC_values_str[7], ';') && getline(inputCSVFile_pedestal, hitBits_str[7], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[6], ';') && getline(inputCSVFile_pedestal, ADC_values_str[6], ';') && getline(inputCSVFile_pedestal, hitBits_str[6], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[5], ';') && getline(inputCSVFile_pedestal, ADC_values_str[5], ';') && getline(inputCSVFile_pedestal, hitBits_str[5], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[4], ';') && getline(inputCSVFile_pedestal, ADC_values_str[4], ';') && getline(inputCSVFile_pedestal, hitBits_str[4], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[3], ';') && getline(inputCSVFile_pedestal, ADC_values_str[3], ';') && getline(inputCSVFile_pedestal, hitBits_str[3], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[2], ';') && getline(inputCSVFile_pedestal, ADC_values_str[2], ';') && getline(inputCSVFile_pedestal, hitBits_str[2], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[1], ';') && getline(inputCSVFile_pedestal, ADC_values_str[1], ';') && getline(inputCSVFile_pedestal, hitBits_str[1], ';') &&
-				getline(inputCSVFile_pedestal, TDC_values_str[0], ';') && getline(inputCSVFile_pedestal, ADC_values_str[0], ';') && getline(inputCSVFile_pedestal, hitBits_str[0]))
-	
-			{
+		if (usePedestalFile) {
+			while(!inputCSVFile_pedestal.eof() ){ //BEGIN while loop over PEDESTAL file
+		
+				if (getline(inputCSVFile_pedestal, eventNumber_str, ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[7], ';') && getline(inputCSVFile_pedestal, ADC_values_str[7], ';') && getline(inputCSVFile_pedestal, hitBits_str[7], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[6], ';') && getline(inputCSVFile_pedestal, ADC_values_str[6], ';') && getline(inputCSVFile_pedestal, hitBits_str[6], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[5], ';') && getline(inputCSVFile_pedestal, ADC_values_str[5], ';') && getline(inputCSVFile_pedestal, hitBits_str[5], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[4], ';') && getline(inputCSVFile_pedestal, ADC_values_str[4], ';') && getline(inputCSVFile_pedestal, hitBits_str[4], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[3], ';') && getline(inputCSVFile_pedestal, ADC_values_str[3], ';') && getline(inputCSVFile_pedestal, hitBits_str[3], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[2], ';') && getline(inputCSVFile_pedestal, ADC_values_str[2], ';') && getline(inputCSVFile_pedestal, hitBits_str[2], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[1], ';') && getline(inputCSVFile_pedestal, ADC_values_str[1], ';') && getline(inputCSVFile_pedestal, hitBits_str[1], ';') &&
+					getline(inputCSVFile_pedestal, TDC_values_str[0], ';') && getline(inputCSVFile_pedestal, ADC_values_str[0], ';') && getline(inputCSVFile_pedestal, hitBits_str[0]))
+		
+				{
 
-				eventNumber[pixelColumn][pixelRow] = eventNumber_str; //stoi(eventNumber_str);
+					eventNumber[pixelColumn][pixelRow] = eventNumber_str; //stoi(eventNumber_str);
 
-				//////////////////////////////////////////////////////////////////////////////////////////
-				//loop through the events and buffer ADC and TDC values, and count up the hitBits == 1
-				//////////////////////////////////////////////////////////////////////////////////////////
+					//////////////////////////////////////////////////////////////////////////////////////////
+					//loop through the events and buffer ADC and TDC values, and count up the hitBits == 1
+					//////////////////////////////////////////////////////////////////////////////////////////
 
-				for(int tBin = 0; tBin < 8; tBin++){ //loop over 8 slices in one event's time bin
+					for(int tBin = 0; tBin < 8; tBin++){ //loop over 8 slices in one event's time bin
 
-					ADC_values[tBin] = stoi(ADC_values_str[tBin]);
-	    			TDC_values[tBin] = stoi(TDC_values_str[tBin]);
-	    			hitBits[tBin]    = stoi(hitBits_str[tBin]);
-				
-					int pixel = getPixelIndex(pixelColumn, pixelRow);
-				
-					ADC_values_event[pixel][tBin] = ADC_values[tBin];
-					TDC_values_event[pixel][tBin] = TDC_values[tBin];
-					hitBits_event[pixel][tBin]    = hitBits[tBin];
-								
-					if(hitBits[tBin] == 1){ 
-						numHitBitSet++; 
-						
+						ADC_values[tBin] = stoi(ADC_values_str[tBin]);
+						TDC_values[tBin] = stoi(TDC_values_str[tBin]);
+						hitBits[tBin]    = stoi(hitBits_str[tBin]);
+					
+						int pixel = getPixelIndex(pixelColumn, pixelRow);
+					
+						ADC_values_event[pixel][tBin] = ADC_values[tBin];
+						TDC_values_event[pixel][tBin] = TDC_values[tBin];
+						hitBits_event[pixel][tBin]    = hitBits[tBin];
+									
+						if(hitBits[tBin] == 1){ 
+							numHitBitSet++; 
+							
+						}
 					}
 				
 				}
@@ -399,16 +414,18 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 				    numEvents++;
 
 				}
-			}
-
-		} //END while loop over PEDESTAL file
+			} //END while loop over PEDESTAL file
 
 		inputCSVFile_pedestal.close();
 
 		cout << "number of pedestal events --> " << numTriggeredEvents << endl;
 		cout << "\n\n";
+
+		} else {
+		cout << "Skipping pedestal file reading" << endl;
+		}
 		
-		if(usePedestalFile){ //BEGIN conditional to print pedestal plots --> only used if you had a pedestal file, and set the flag
+	if(usePedestalFile){ //BEGIN conditional to print pedestal plots --> only used if you had a pedestal file, and set the flag
 
 			TCanvas * adcRAWCan[8]; 
 		
@@ -536,7 +553,7 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 		///////////////////////////////////////////////////////////////////
 		
 
-
+	if (usePedestalFile) {
 		while(!inputCSVFile.eof()){//BEGIN while loop over main data file
 	
 			if (getline(inputCSVFile, eventNumber_str, ';') &&
@@ -839,6 +856,9 @@ void analyzeCSVData_radSource(TString inputFileName = "", TString inputFileName_
 		cout << "Number of events total recorded : " << numEvents << endl;
 
 		inputCSVFile.close();
+	} else {
+		cout << "Skipping pedestal file reading" << endl;
+	}
 
 	} //END for loop over file indices
 
